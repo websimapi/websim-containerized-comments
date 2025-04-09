@@ -119,22 +119,57 @@
     function CommentList() {
       const [comments, setComments] = useState([]);
       const [loading, setLoading] = useState(true);
+      const [error, setError] = useState(null);
+      const [metadata, setMetadata] = useState(null);
 
       useEffect(() => {
-        async function fetchComments() {
-          const project = await window.websim.getCurrentProject();
-          const response = await fetch(`/api/v1/projects/${project.id}/comments`);
-          const data = await response.json();
-          setComments(data.comments.data.map(c => c.comment));
-          setLoading(false);
+        async function fetchCommentsAndMetadata() {
+          try {
+            const project = await window.websim.getCurrentProject();
+            
+            // Fetch comments and project data in parallel
+            const [commentsResponse, projectResponse] = await Promise.all([
+              fetch(`/api/v1/projects/${project.id}/comments`),
+              fetch(`/api/v1/projects/${project.id}`)
+            ]);
+
+            const [commentsData, projectData] = await Promise.all([
+              commentsResponse.json(),
+              projectResponse.json()
+            ]);
+
+            setComments(commentsData.comments.data.map(c => c.comment));
+            setMetadata({
+              commentsCount: commentsData.comments.meta.count || 0,
+              project: projectData.project,
+              commentsMode: projectData.project.comments_mode
+            });
+          } catch (err) {
+            setError('Failed to load comments');
+            console.error('Error fetching comments:', err);
+          } finally {
+            setLoading(false);
+          }
         }
-        fetchComments();
+        
+        fetchCommentsAndMetadata();
       }, []);
 
       if (loading) return html`<div>Loading comments...</div>`;
+      if (error) return html`<div style=${{color: 'red'}}>${error}</div>`;
 
       return html`
         <div>
+          ${metadata?.commentsMode === 'closed' ? html`
+            <div style=${{margin: '10px 0', color: '#666'}}>
+              Comments are closed for this project
+            </div>
+          ` : null}
+          
+          <div style=${{margin: '10px 0', color: '#666'}}>
+            ${metadata?.commentsCount} comment${metadata?.commentsCount !== 1 ? 's' : ''}
+          </div>
+
           ${comments.map(comment => html`
             <${Comment} 
               key=${comment.id}
@@ -153,4 +188,3 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
-
